@@ -10,8 +10,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch("/activities");
       const activities = await response.json();
 
-      // Clear loading message
+      // Clear loading message and reset select
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -25,6 +26,13 @@ document.addEventListener("DOMContentLoaded", () => {
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+
+          <div class="participants-section">
+            <h5>Participants</h5>
+            ${details.participants && details.participants.length
+              ? `<ul class="participants-list">${details.participants.map(p => `<li class="participant-item"><span class="participant-email">${p}</span><button class="participant-remove" data-activity="${name}" data-email="${p}" aria-label="Remove participant">✕</button></li>`).join('')}</ul>`
+              : `<p class="no-participants">No participants yet</p>`}
+          </div>
         `;
 
         activitiesList.appendChild(activityCard);
@@ -34,6 +42,40 @@ document.addEventListener("DOMContentLoaded", () => {
         option.value = name;
         option.textContent = name;
         activitySelect.appendChild(option);
+
+        // Attach remove handlers for this card's buttons
+        activityCard.querySelectorAll('.participant-remove').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const activityName = btn.dataset.activity;
+            const email = btn.dataset.email;
+
+            try {
+              const res = await fetch(`/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(email)}`, { method: 'DELETE' });
+              const data = await res.json();
+
+              if (res.ok) {
+                messageDiv.textContent = data.message;
+                messageDiv.className = 'message success';
+                messageDiv.classList.remove('hidden');
+                // Refresh activities list
+                await fetchActivities();
+              } else {
+                messageDiv.textContent = data.detail || 'Failed to remove participant';
+                messageDiv.className = 'message error';
+                messageDiv.classList.remove('hidden');
+              }
+
+              setTimeout(() => {
+                messageDiv.classList.add('hidden');
+              }, 4000);
+            } catch (err) {
+              messageDiv.textContent = 'Network error while removing participant';
+              messageDiv.className = 'message error';
+              messageDiv.classList.remove('hidden');
+              console.error(err);
+            }
+          });
+        });
       });
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
@@ -60,11 +102,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (response.ok) {
         messageDiv.textContent = result.message;
-        messageDiv.className = "success";
+        messageDiv.className = "message success";
         signupForm.reset();
+        // Refresh activities to show the new participant
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        messageDiv.className = "message error";
       }
 
       messageDiv.classList.remove("hidden");
@@ -75,7 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }, 5000);
     } catch (error) {
       messageDiv.textContent = "Failed to sign up. Please try again.";
-      messageDiv.className = "error";
+      messageDiv.className = "message error";
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
     }
